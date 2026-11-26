@@ -254,3 +254,44 @@ Understanding why each step works is more important than memorising the payloads
 ### FLAG IN TASK 4 *(hint)*:
 
 Questions asking you about how you detect which type of In-Band Injection it is and How you can manipulate some global value on database that running on that server.
+
+## Task 5: Blind SQL Injection: Authentication Bypass
+
+Why is it calling "Blind" - Because the response don't give you anything hint or specific information about what that web app are running on server. You have to guessing a lot while facing with this type (Mostly in real life).
+
+The most intuitive example about this type is Authentication Bypass because it will working if you can log in the website and never see what output the database response to you (It's never because you just submit the login form with technique to skipping the password requirement not query for data or something else).
+
+#### How Authentication Queries Work
+
+The simple query structure for login form can be like this:
+```sql
+SELECT * FROM users WHERE username='bob' AND password='secret123' LIMIT 1;
+```
+
+The application just check whether this query results return any rows. If it does, you log in, if not you stay on the log in page or getting redirect to guest side, with simple announce: "Invalid credentials"
+
+#### How to attack this query
+Using the [Comment](#comments) technique. Remember this technique use to cutting the query where the input is, it make the query skipping all the requirement behind that format *--*.
+
+But If your input *(In this case: username)* not available too, you need to make it 100% true by adding *OR 1=1* before the comment.
+
+
+
+However, you know the existed username *("admin")*, you just put that in and confirm you are in that account.
+
+And also don't forget the single-quote.
+
+#### Variations
+
+The exact payload depends on the query structure. Some things to try:
+
+- *' OR 1=1;--* is classic bypass, works when the username is wrapped in single quotes
+
+- *' OR 1=1#* this uses # as the comment character (MySQL alternative)
+
+- *" OR 1=1--* for queries that use double quotes around the input
+
+Try both the username and password fields:  some applications only concatenate one of them into the query, so the vulnerable field may vary
+
+#### FLAG IN TASK 5 *(hint)*:
+Just the boolean condition you must use if you don't the existed input you need.
