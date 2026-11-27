@@ -445,7 +445,7 @@ Its describing the statement in different programming languages, how its vulnera
  Read the
 
  ## Task 9: Pratical
- ![alt text](image.png)
+ ![alt text](images/image.png)
  So this level showing query by id *https://website.thm/article?id=1*
 
  But you need the user/password : So doing as the staging process on Task 4.
@@ -455,13 +455,13 @@ Its describing the statement in different programming languages, how its vulnera
  2. Second stage: we found that there are two tables on the database
  3. Retrieve the password required.
 
- ![alt text](image-1.png)
+ ![alt text](images/image-1.png)
 
  Level Two is login form, so you should try the comment first, but in this room the request must be filled in both username and password no matter if the server use that or not, so make sure you typed something in.
 
-![alt text](image-2.png)
+![alt text](images/image-2.png)
 Level Three that is Boolean-Based, how do i know, there your response log above showing there a condition value, so let brute-force this <("). Joking it show that the username already true, it is admin. Let practice like what we need to get the login access. This take a while to check the information that exist so just keep going (Make sure to also use special characters)
 
-![alt text](image-3.png)
+![alt text](images/image-3.png)
 
 Level Four is Time Based doing the same as Boolean but this time count the time.
